@@ -45,4 +45,4 @@ CONCLUSION
 Although most of the comparisons had no significance, the comparisons that did have significant results showed that MaxPool and AvgPool performed better than Variable Stride. There can be two factors that can contribute to Variable Stride’s underperformance. We tested our networks using a dataset of 200 images. Performance results might differ if we tested on a larger dataset since, the more training data you have, the better network performance. Another factor is the dataset itself. The complications in diabetic retinopathy are not focused on one area of the eye, they’re scattered around the eye. Since Variable Stride focuses on important areas in an image, the diabetic retinopathy dataset could not be an ideal dataset for this pooling method due to the nature of where these anomalies are located. 
 
 
-[cnnPosterupdated.pdf](https://github.com/str-ying/Enhanced-Deep-Learning-Project/files/7079724/cnnPosterupdated.pdf)
+
