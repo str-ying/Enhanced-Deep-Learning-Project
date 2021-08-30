@@ -1,0 +1,149 @@
+import cv2
+import keras
+import matplotlib
+import pickle
+import os
+import random
+import sklearn
+import time
+import matplotlib.pyplot as plt
+import numpy as np
+import tensorflow as tf
+from keras import activations
+from keras import backend as K
+from PIL import Image
+from sklearn import metrics
+from tensorflow.keras.callbacks import TensorBoard
+from tensorflow.keras.datasets import cifar10
+from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten, Conv2D, MaxPooling2D, BatchNormalization, Flatten, Layer
+from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras import datasets, layers, models
+
+data_root='/content/drive/MyDrive/Rotated Dataset'
+
+IMAGE_SHAPE = (600, 600)
+TRAINING_DATA_DIR = str(data_root)
+print(TRAINING_DATA_DIR);
+#datagen_kwargs = dict(rescale=1./255, validation_split=.2)
+datagen_kwargs = dict(rescale=1./255)
+
+valid_datagen = tf.keras.preprocessing.image.ImageDataGenerator(**datagen_kwargs)
+valid_generator = valid_datagen.flow_from_directory(TRAINING_DATA_DIR,subset="validation",shuffle=True,target_size=IMAGE_SHAPE,batch_size=55)
+train_datagen = tf.keras.preprocessing.image.ImageDataGenerator(**datagen_kwargs)
+train_generator = train_datagen.flow_from_directory(TRAINING_DATA_DIR,subset="training",shuffle=True,target_size=IMAGE_SHAPE,batch_size=200)
+
+image_batch_train, label_batch_train = next(iter(train_generator))
+print("Image batch shape: ", image_batch_train.shape)
+print("Label batch shape: ", label_batch_train.shape)
+dataset_labels = sorted(train_generator.class_indices.items(), key=lambda pair:pair[1])
+dataset_labels = np.array([key.title() for key, value in dataset_labels])
+
+#Rename
+class_names = dataset_labels
+train_images = image_batch_train
+train_labels = label_batch_train
+
+#Load and split dataset into training and testing images
+from sklearn.model_selection import train_test_split
+train_images, test_images, train_labels, test_labels = train_test_split(train_images, train_labels, test_size=0.2)
+
+#Print out an example image
+plt.figure()
+plt.imshow(train_images[2])
+plt.colorbar()
+plt.grid(False)
+plt.show
+
+Classifications = ["Class 1", "Class 4"]
+
+dense_layers = [1]
+layer_sizes = [64]
+conv_layers = [5]
+drop_out_rates = [.2]
+valid_seperation = .15
+
+total_runs = 4
+current_run = 0
+dim = (30,300,300,3)
+
+pickle_in = open("/content/drive/MyDrive/max_pool_image.pickle", "rb")
+x = pickle.load(pickle_in)
+pickle_in = open("/content/drive/MyDrive/label_array.pickle", "rb")
+y = pickle.load(pickle_in)
+
+test_data_1 = int(200 - (200 * valid_seperation))
+test_data_2 = int(200 - (200 * valid_seperation))
+i = 0
+
+test_data_image = np.zeros(dim)
+test_data_label = np.zeros(30)
+
+for test_data_1 in range(test_data_2, 200):
+  test_data_image[i] = x[test_data_1]
+  test_data_label[i] = y[test_data_1]
+  i += 1
+
+for current_run in range(0, total_runs):
+  for dense_layer in dense_layers:
+    for layer_size in layer_sizes:
+      for conv_layer in conv_layers:
+        for drop_out in drop_out_rates:
+          NAME = "{}-conv-{}-nodes-{}-dense-{}-dropout-{}-run-{}".format(conv_layer, layer_size, dense_layer,drop_out, (current_run + 1), int(time.time()))
+
+          print(NAME)
+          model = Sequential()
+
+          model.add(Conv2D(layer_size, (3,3), input_shape = (300,300,3)))
+          model.add(Activation("relu"))
+          model.add(MaxPooling2D(pool_size=(2,2)))
+          model.add(Dropout(.25))
+
+          for l in range(conv_layer - 1):
+            model.add(Conv2D(layer_size, (3, 3)))
+            model.add(Activation('relu'))
+            model.add(MaxPooling2D(pool_size=(2, 2)))
+            model.add(Dropout(.25))
+      
+          model.add(Flatten())
+
+          for l in range(dense_layer):
+            model.add(Dense(layer_size))
+            model.add(Activation('relu'))
+
+          model.add(Dense(1))
+          model.add(Activation('sigmoid'))
+
+          #============================logs of progress===================================
+          logdir = os.path.join("logs", NAME) #Edit Name of Logs
+          tensorboard_callback = TensorBoard(logdir, histogram_freq=1)
+          stop = tf.keras.callbacks.EarlyStopping(monitor = 'accuracy', patience = 10)
+          #===============================================================================
+
+          model.compile(loss = "binary_crossentropy", optimizer = "adam", metrics = ['accuracy'])
+          model.fit(x, y, batch_size = 10, epochs = 100, validation_split= valid_seperation, callbacks=[tensorboard_callback], shuffle = True)
+
+
+          label_pred_keras = model.predict(test_data_image, batch_size = 1)
+          fpr_keras, tpr_keras, thresholds_keras = sklearn.metrics.roc_curve(test_data_label, label_pred_keras)
+          auc = sklearn.metrics.roc_auc_score(test_data_label, label_pred_keras)
+
+          plt.figure(1)
+          plt.plot([0, 1], [0, 1], 'k--')
+          plt.plot(fpr_keras, tpr_keras, label='Keras (area = {:.3f})'.format(auc))
+          plt.xlabel('False positive rate')
+          plt.ylabel('True positive rate')
+          plt.title('ROC curve')
+          plt.legend(loc='best')
+          plt.show()
+
+          for n in range(np.max(np.size(label_pred_keras))):
+            if label_pred_keras[n,0] < .5:
+              label_pred_keras[n,0] = 0
+            if label_pred_keras[n,0] >= 0.5:
+              label_pred_keras[n,0] = 1
+            
+          print('Classification Report')
+
+          print(sklearn.metrics.classification_report(test_data_label,label_pred_keras,target_names = Classifications))
